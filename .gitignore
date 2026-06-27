@@ -13,6 +13,7 @@ dist/
 web-build/
 
 # Local env files
+.env
 .env*.local
 
 # Logs

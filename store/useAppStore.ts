@@ -1,10 +1,29 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AppState, Transaction, Budget, UserProfile, Currency } from './types';
+import type { AppState, Transaction, Budget, UserProfile, Currency, AppNotification } from './types';
 import type { Category } from '../constants/categories';
+import { auth, db, isConfigured } from '../utils/firebase';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut,
+  updateProfile as firebaseUpdateProfile,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { 
+  doc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc, 
+  collection, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  writeBatch
+} from 'firebase/firestore';
 
-// ─── Seed Data ────────────────────────────────────────────────────────────────
+// ─── Seed Data (Used as local fallback when not authenticated) ─────────────────
 const now = new Date();
 const thisYear = now.getFullYear();
 const thisMonth = now.getMonth();
@@ -55,11 +74,32 @@ function isThisMonth(isoDate: string) {
   return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
 }
 
+// ─── Firebase Real-time listeners storage ──────────────────────────────────────
+let unsubUserDoc: any = null;
+let unsubTransactions: any = null;
+let unsubBudgets: any = null;
+let unsubNotifications: any = null;
+
+function clearSync() {
+  if (unsubUserDoc) unsubUserDoc();
+  if (unsubTransactions) unsubTransactions();
+  if (unsubBudgets) unsubBudgets();
+  if (unsubNotifications) unsubNotifications();
+  unsubUserDoc = null;
+  unsubTransactions = null;
+  unsubBudgets = null;
+  unsubNotifications = null;
+}
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       // ── Initial State ──
+      userId: null,
+      authLoading: isConfigured,
+      authError: null,
+
       hasOnboarded: false,
       hasSetupAccount: false,
       user: { name: 'Arjun Sharma', email: 'arjun@example.com', avatarColor: '#2ED9A0' },
@@ -109,70 +149,347 @@ export const useAppStore = create<AppState>()(
       // ── Actions ──
       setOnboarded: () => set({ hasOnboarded: true }),
 
-      setAccountSetup: (user, balance) =>
-        set({ user, startingBalance: balance, hasSetupAccount: true }),
+      setAccountSetup: async (user, balance) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          try {
+            await updateDoc(doc(db, 'users', uid), {
+              hasSetupAccount: true,
+              startingBalance: balance,
+              name: user.name,
+              email: user.email,
+              avatarColor: user.avatarColor,
+            });
+          } catch (err) {
+            console.error('Error updating account setup in Firestore:', err);
+          }
+        }
+        set({ user, startingBalance: balance, hasSetupAccount: true });
+      },
 
-      addTransaction: (t) =>
-        set((s) => ({
-          transactions: [{ ...t, id: genId() }, ...s.transactions],
-        })),
+      // ── Auth Actions ──
+      login: async (email, password) => {
+        if (!isConfigured) {
+          throw new Error('Firebase is not configured. Please fill in your .env file credentials.');
+        }
+        set({ authLoading: true, authError: null });
+        try {
+          await signInWithEmailAndPassword(auth, email, password);
+        } catch (err: any) {
+          set({ authError: err.message || 'Failed to login' });
+          throw err;
+        } finally {
+          set({ authLoading: false });
+        }
+      },
 
-      editTransaction: (id, t) =>
-        set((s) => ({
-          transactions: s.transactions.map((tx) =>
-            tx.id === id ? { ...tx, ...t } : tx
-          ),
-        })),
+      signUp: async (email, password, name) => {
+        if (!isConfigured) {
+          throw new Error('Firebase is not configured. Please fill in your .env file credentials.');
+        }
+        set({ authLoading: true, authError: null });
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, email, password);
+          await firebaseUpdateProfile(cred.user, { displayName: name });
+          
+          // Seed new profile
+          const avatarColors = ['#2ED9A0', '#6366F1', '#F59E0B', '#EC4899', '#3B82F6'];
+          const avatarColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
 
-      deleteTransaction: (id) =>
-        set((s) => ({
-          transactions: s.transactions.filter((tx) => tx.id !== id),
-        })),
+          await setDoc(doc(db, 'users', cred.user.uid), {
+            name,
+            email,
+            avatarColor,
+            startingBalance: 0,
+            currency: '₹',
+            isDarkMode: false,
+            dailyReminder: true,
+            biometricEnabled: false,
+            customCategories: [],
+            hasSetupAccount: false,
+          });
 
-      addBudget: (b) =>
-        set((s) => ({
-          budgets: [
-            ...s.budgets,
-            { ...b, id: genId(), createdAt: new Date().toISOString() },
-          ],
-        })),
+          // Seed welcome notification
+          const welcomeId = 'welcome-note';
+          await setDoc(doc(db, 'users', cred.user.uid, 'notifications', welcomeId), {
+            id: welcomeId,
+            type: 'daily_reminder',
+            title: 'Welcome to ExpenseTracker! 🎉',
+            message: 'Your Cloud Firebase backend is active and syncs automatically.',
+            isRead: false,
+            createdAt: new Date().toISOString(),
+          });
+        } catch (err: any) {
+          set({ authError: err.message || 'Failed to sign up' });
+          throw err;
+        } finally {
+          set({ authLoading: false });
+        }
+      },
 
-      deleteBudget: (id) =>
-        set((s) => ({
-          budgets: s.budgets.filter((b) => b.id !== id),
-        })),
+      logout: async () => {
+        clearSync();
+        if (isConfigured) {
+          await signOut(auth);
+        }
+        set({
+          userId: null,
+          hasSetupAccount: false,
+          hasOnboarded: true,
+          user: { name: '', email: '', avatarColor: '#2ED9A0' },
+          startingBalance: 0,
+          transactions: [],
+          budgets: [],
+          notifications: [],
+          customCategories: [],
+        });
+      },
 
-      markNotificationRead: (id) =>
-        set((s) => ({
-          notifications: s.notifications.map((n) =>
-            n.id === id ? { ...n, isRead: true } : n
-          ),
-        })),
+      syncWithFirebase: (uid) => {
+        clearSync();
 
-      clearAllNotifications: () =>
-        set((s) => ({
-          notifications: s.notifications.map((n) => ({ ...n, isRead: true })),
-        })),
+        // 1. Sync user document details
+        unsubUserDoc = onSnapshot(doc(db, 'users', uid), (snapshot) => {
+          if (snapshot.exists()) {
+            const data = snapshot.data();
+            set({
+              user: {
+                name: data.name || '',
+                email: data.email || '',
+                avatarColor: data.avatarColor || '#2ED9A0',
+              },
+              startingBalance: data.startingBalance ?? 0,
+              currency: data.currency || '₹',
+              isDarkMode: data.isDarkMode ?? false,
+              dailyReminder: data.dailyReminder ?? true,
+              biometricEnabled: data.biometricEnabled ?? false,
+              customCategories: data.customCategories || [],
+              hasSetupAccount: data.hasSetupAccount ?? false,
+            });
+          }
+        }, (err) => {
+          console.error('Error syncing user details:', err);
+        });
 
-      setCurrency: (c) => set({ currency: c }),
-      setDarkMode: (v) => set({ isDarkMode: v }),
-      setDailyReminder: (v) => set({ dailyReminder: v }),
-      setBiometric: (v) => set({ biometricEnabled: v }),
+        // 2. Sync transactions
+        unsubTransactions = onSnapshot(
+          query(collection(db, 'users', uid, 'transactions'), orderBy('date', 'desc')),
+          (snapshot) => {
+            const txs: Transaction[] = [];
+            snapshot.forEach((docSnap) => {
+              txs.push(docSnap.data() as Transaction);
+            });
+            set({ transactions: txs });
+          },
+          (err) => {
+            console.error('Error syncing transactions:', err);
+          }
+        );
 
-      updateProfile: (p) =>
-        set((s) => ({ user: { ...s.user, ...p } })),
+        // 3. Sync budgets
+        unsubBudgets = onSnapshot(
+          collection(db, 'users', uid, 'budgets'),
+          (snapshot) => {
+            const budgetsList: Budget[] = [];
+            snapshot.forEach((docSnap) => {
+              budgetsList.push(docSnap.data() as Budget);
+            });
+            set({ budgets: budgetsList });
+          },
+          (err) => {
+            console.error('Error syncing budgets:', err);
+          }
+        );
 
-      updateStartingBalance: (b) => set({ startingBalance: b }),
+        // 4. Sync notifications
+        unsubNotifications = onSnapshot(
+          query(collection(db, 'users', uid, 'notifications'), orderBy('createdAt', 'desc')),
+          (snapshot) => {
+            const notes: AppNotification[] = [];
+            snapshot.forEach((docSnap) => {
+              notes.push(docSnap.data() as AppNotification);
+            });
+            set({ notifications: notes });
+          },
+          (err) => {
+            console.error('Error syncing notifications:', err);
+          }
+        );
 
-      addCustomCategory: (cat) =>
-        set((s) => ({
-          customCategories: [...s.customCategories, { ...cat, isCustom: true }],
-        })),
+        return () => {
+          clearSync();
+        };
+      },
 
-      deleteCustomCategory: (id) =>
-        set((s) => ({
-          customCategories: s.customCategories.filter((c) => c.id !== id),
-        })),
+      addTransaction: async (t) => {
+        const id = genId();
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await setDoc(doc(db, 'users', uid, 'transactions', id), {
+            ...t,
+            id,
+          });
+        } else {
+          set((s) => ({
+            transactions: [{ ...t, id }, ...s.transactions],
+          }));
+        }
+      },
+
+      editTransaction: async (id, t) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await updateDoc(doc(db, 'users', uid, 'transactions', id), t);
+        } else {
+          set((s) => ({
+            transactions: s.transactions.map((tx) =>
+              tx.id === id ? { ...tx, ...t } : tx
+            ),
+          }));
+        }
+      },
+
+      deleteTransaction: async (id) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await deleteDoc(doc(db, 'users', uid, 'transactions', id));
+        } else {
+          set((s) => ({
+            transactions: s.transactions.filter((tx) => tx.id !== id),
+          }));
+        }
+      },
+
+      addBudget: async (b) => {
+        const id = genId();
+        const createdAt = new Date().toISOString();
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await setDoc(doc(db, 'users', uid, 'budgets', id), {
+            ...b,
+            id,
+            createdAt,
+          });
+        } else {
+          set((s) => ({
+            budgets: [
+              ...s.budgets,
+              { ...b, id, createdAt },
+            ],
+          }));
+        }
+      },
+
+      deleteBudget: async (id) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await deleteDoc(doc(db, 'users', uid, 'budgets', id));
+        } else {
+          set((s) => ({
+            budgets: s.budgets.filter((b) => b.id !== id),
+          }));
+        }
+      },
+
+      markNotificationRead: async (id) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await updateDoc(doc(db, 'users', uid, 'notifications', id), {
+            isRead: true,
+          });
+        } else {
+          set((s) => ({
+            notifications: s.notifications.map((n) =>
+              n.id === id ? { ...n, isRead: true } : n
+            ),
+          }));
+        }
+      },
+
+      clearAllNotifications: async () => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          const batch = writeBatch(db);
+          const notifications = get().notifications;
+          notifications.forEach((n) => {
+            if (!n.isRead) {
+              batch.update(doc(db, 'users', uid, 'notifications', n.id), { isRead: true });
+            }
+          });
+          await batch.commit();
+        } else {
+          set((s) => ({
+            notifications: s.notifications.map((n) => ({ ...n, isRead: true })),
+          }));
+        }
+      },
+
+      setCurrency: async (c) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await updateDoc(doc(db, 'users', uid), { currency: c });
+        }
+        set({ currency: c });
+      },
+
+      setDarkMode: async (v) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await updateDoc(doc(db, 'users', uid), { isDarkMode: v });
+        }
+        set({ isDarkMode: v });
+      },
+
+      setDailyReminder: async (v) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await updateDoc(doc(db, 'users', uid), { dailyReminder: v });
+        }
+        set({ dailyReminder: v });
+      },
+
+      setBiometric: async (v) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await updateDoc(doc(db, 'users', uid), { biometricEnabled: v });
+        }
+        set({ biometricEnabled: v });
+      },
+
+      updateProfile: async (p) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await updateDoc(doc(db, 'users', uid), p);
+        }
+        set((s) => ({ user: { ...s.user, ...p } }));
+      },
+
+      updateStartingBalance: async (b) => {
+        const uid = get().userId;
+        if (uid && isConfigured) {
+          await updateDoc(doc(db, 'users', uid), { startingBalance: b });
+        }
+        set({ startingBalance: b });
+      },
+
+      addCustomCategory: async (cat) => {
+        const uid = get().userId;
+        const newCat = { ...cat, isCustom: true };
+        const updated = [...get().customCategories, newCat];
+        if (uid && isConfigured) {
+          await updateDoc(doc(db, 'users', uid), { customCategories: updated });
+        }
+        set({ customCategories: updated });
+      },
+
+      deleteCustomCategory: async (id) => {
+        const uid = get().userId;
+        const updated = get().customCategories.filter((c) => c.id !== id);
+        if (uid && isConfigured) {
+          await updateDoc(doc(db, 'users', uid), { customCategories: updated });
+        }
+        set({ customCategories: updated });
+      },
 
       // ── Computed ──
       getTotalSpentThisMonth: () => {
@@ -230,3 +547,17 @@ export const useAppStore = create<AppState>()(
     }
   )
 );
+
+// ─── Setup Auth Listener on Boot ──────────────────────────────────────────────
+if (isConfigured) {
+  onAuthStateChanged(auth, (firebaseUser) => {
+    if (firebaseUser) {
+      useAppStore.setState({ userId: firebaseUser.uid });
+      useAppStore.getState().syncWithFirebase(firebaseUser.uid);
+    } else {
+      useAppStore.setState({ userId: null, authLoading: false });
+      clearSync();
+    }
+  });
+}
+

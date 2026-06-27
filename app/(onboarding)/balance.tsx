@@ -25,6 +25,7 @@ const KEYS = [
 
 export default function BalanceScreen() {
   const [amount, setAmount] = useState('0');
+  const [loading, setLoading] = useState(false);
   const setAccountSetup = useAppStore((s) => s.setAccountSetup);
   const user = useAppStore((s) => s.user);
 
@@ -38,15 +39,29 @@ export default function BalanceScreen() {
     else if (amount.length < 10) setAmount(amount + key);
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     const balance = parseFloat(amount) || 0;
-    setAccountSetup(user, balance);
-    router.replace('/(tabs)');
+    setLoading(true);
+    try {
+      await setAccountSetup(user, balance);
+      router.replace('/(tabs)');
+    } catch (err) {
+      console.error('Failed to setup account balance:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSkip = () => {
-    setAccountSetup(user, 0);
-    router.replace('/(tabs)');
+  const handleSkip = async () => {
+    setLoading(true);
+    try {
+      await setAccountSetup(user, 0);
+      router.replace('/(tabs)');
+    } catch (err) {
+      console.error('Failed to skip balance setup:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const displayFormatted = () => {
@@ -120,6 +135,7 @@ export default function BalanceScreen() {
         <GradientButton
           title="Continue"
           onPress={handleContinue}
+          loading={loading}
           style={styles.ctaBtn}
         />
       </View>

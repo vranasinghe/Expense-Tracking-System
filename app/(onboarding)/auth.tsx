@@ -18,6 +18,7 @@ import { useAppStore } from '../../store/useAppStore';
 import GradientButton from '../../components/ui/GradientButton';
 import { Colors } from '../../constants/colors';
 import { FontSize, Spacing, Radius } from '../../constants/theme';
+import { isConfigured } from '../../utils/firebase';
 
 type Mode = 'login' | 'signup';
 
@@ -29,9 +30,10 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const setAccountSetup = useAppStore((s) => s.setAccountSetup);
+  const storeLogin = useAppStore((s) => s.login);
+  const storeSignUp = useAppStore((s) => s.signUp);
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (mode === 'signup' && !name.trim()) {
       Alert.alert('Name required', 'Please enter your name to continue.');
       return;
@@ -40,16 +42,38 @@ export default function AuthScreen() {
       Alert.alert('Invalid email', 'Please enter a valid email address.');
       return;
     }
-    if (password.length < 4) {
-      Alert.alert('Weak password', 'Password must be at least 4 characters.');
+    if (password.length < 6) {
+      Alert.alert('Weak password', 'Password must be at least 6 characters.');
       return;
     }
 
     setLoading(true);
-    setTimeout(() => {
+
+    if (!isConfigured) {
+      // Fallback/Mock Mode if Firebase credentials are not set
+      setTimeout(() => {
+        setLoading(false);
+        useAppStore.setState({
+          user: { name: mode === 'signup' ? name : 'Arjun Sharma', email, avatarColor: '#2ED9A0' }
+        });
+        router.replace('/(onboarding)/balance');
+      }, 800);
+      return;
+    }
+
+    try {
+      if (mode === 'signup') {
+        await storeSignUp(email, password, name);
+        router.replace('/(onboarding)/balance');
+      } else {
+        await storeLogin(email, password);
+        router.replace('/');
+      }
+    } catch (err: any) {
+      Alert.alert('Authentication Error', err.message || 'An error occurred during authentication.');
+    } finally {
       setLoading(false);
-      router.replace('/(onboarding)/balance');
-    }, 800);
+    }
   };
 
   const avatarColors = ['#2ED9A0', '#6366F1', '#F59E0B', '#EC4899', '#3B82F6'];

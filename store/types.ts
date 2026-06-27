@@ -38,6 +38,11 @@ export interface UserProfile {
 export type Currency = '₹' | '$' | '€' | '£';
 
 export interface AppState {
+  // Auth state
+  userId: string | null;
+  authLoading: boolean;
+  authError: string | null;
+
   // Setup
   hasOnboarded: boolean;
   hasSetupAccount: boolean;
@@ -63,6 +68,13 @@ export interface AppState {
   // Actions
   setOnboarded: () => void;
   setAccountSetup: (user: UserProfile, balance: number) => void;
+  
+  // Auth & Sync Actions
+  login: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string) => Promise<void>;
+  logout: () => Promise<void>;
+  syncWithFirebase: (uid: string) => () => void;
+
   addTransaction: (t: Omit<Transaction, 'id'>) => void;
   editTransaction: (id: string, t: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;

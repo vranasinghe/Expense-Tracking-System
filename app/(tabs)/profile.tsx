@@ -85,13 +85,16 @@ export default function ProfileScreen() {
   const setDailyReminder = useAppStore((s) => s.setDailyReminder);
   const setBiometric = useAppStore((s) => s.setBiometric);
   const updateStartingBalance = useAppStore((s) => s.updateStartingBalance);
+  const logout = useAppStore((s) => s.logout);
 
   const initials = user.name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+    ? user.name
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    : 'U';
 
   const handleLogOut = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -99,7 +102,14 @@ export default function ProfileScreen() {
       {
         text: 'Log Out',
         style: 'destructive',
-        onPress: () => router.replace('/(onboarding)/auth'),
+        onPress: async () => {
+          try {
+            await logout();
+            router.replace('/(onboarding)/auth');
+          } catch (err) {
+            console.error('Logout error:', err);
+          }
+        },
       },
     ]);
   };
