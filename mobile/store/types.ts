@@ -67,7 +67,7 @@ export interface AppState {
   
   // Actions
   setOnboarded: () => void;
-  setAccountSetup: (user: UserProfile, balance: number) => void;
+  setAccountSetup: (user: UserProfile, balance: number) => Promise<void>;
   
   // Auth & Sync Actions
   login: (email: string, password: string) => Promise<void>;
@@ -75,21 +75,21 @@ export interface AppState {
   logout: () => Promise<void>;
   syncWithFirebase: (uid: string) => () => void;
 
-  addTransaction: (t: Omit<Transaction, 'id'>) => void;
-  editTransaction: (id: string, t: Partial<Transaction>) => void;
-  deleteTransaction: (id: string) => void;
-  addBudget: (b: Omit<Budget, 'id' | 'createdAt'>) => void;
-  deleteBudget: (id: string) => void;
-  markNotificationRead: (id: string) => void;
-  clearAllNotifications: () => void;
-  setCurrency: (c: Currency) => void;
-  setDarkMode: (v: boolean) => void;
-  setDailyReminder: (v: boolean) => void;
-  setBiometric: (v: boolean) => void;
-  updateProfile: (p: Partial<UserProfile>) => void;
-  updateStartingBalance: (b: number) => void;
-  addCustomCategory: (cat: Category) => void;
-  deleteCustomCategory: (id: string) => void;
+  addTransaction: (t: Omit<Transaction, 'id'>) => Promise<void>;
+  editTransaction: (id: string, t: Partial<Transaction>) => Promise<void>;
+  deleteTransaction: (id: string) => Promise<void>;
+  addBudget: (b: Omit<Budget, 'id' | 'createdAt'>) => Promise<void>;
+  deleteBudget: (id: string) => Promise<void>;
+  markNotificationRead: (id: string) => Promise<void>;
+  clearAllNotifications: () => Promise<void>;
+  setCurrency: (c: Currency) => Promise<void>;
+  setDarkMode: (v: boolean) => Promise<void>;
+  setDailyReminder: (v: boolean) => Promise<void>;
+  setBiometric: (v: boolean) => Promise<void>;
+  updateProfile: (p: Partial<UserProfile>) => Promise<void>;
+  updateStartingBalance: (b: number) => Promise<void>;
+  addCustomCategory: (cat: Category) => Promise<void>;
+  deleteCustomCategory: (id: string) => Promise<void>;
   
   // Computed helpers (called as methods)
   getTotalSpentThisMonth: () => number;

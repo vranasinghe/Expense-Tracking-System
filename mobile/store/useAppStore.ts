@@ -560,4 +560,3 @@ if (isConfigured) {
     }
   });
 }
-

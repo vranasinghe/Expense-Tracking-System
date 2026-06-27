@@ -76,9 +76,6 @@ export default function AuthScreen() {
     }
   };
 
-  const avatarColors = ['#2ED9A0', '#6366F1', '#F59E0B', '#EC4899', '#3B82F6'];
-  const randomColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
-
   return (
     <KeyboardAvoidingView
       style={styles.container}

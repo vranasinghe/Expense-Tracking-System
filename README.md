@@ -31,28 +31,29 @@ A local-first, premium **Expense & Budget Tracking Application** built with **Re
 ## 📁 Folder Structure
 
 ```text
-Expense Tracking System/
-├── app/                      # Expo Router App Screens & Layouts
-│   ├── (onboarding)/         # Onboarding & Auth Setup flow
-│   │   ├── splash.tsx        # Splash page
-│   │   ├── auth.tsx          # Local passcode & biometric authentication screen
-│   │   └── balance.tsx       # Starting balance configuration
-│   ├── (tabs)/               # Tab-based dashboard routing
-│   │   ├── index.tsx         # Dashboard / Home Screen
-│   │   ├── analytics.tsx     # Visual metrics & spending breakdowns
-│   │   ├── budgets.tsx       # Budgets configuration & status chips
-│   │   └── profile.tsx       # Settings, Dark Mode, Profile customization
-│   ├── _layout.tsx           # Global Root Navigation Layout
-│   └── index.tsx             # Main router entry / redirect logic
-├── assets/                   # App icons, splash, and media assets
-├── components/               # Reusable UI & Functional Screen Components
-│   ├── screens/              # Modals/Drawers (AddExpenseSheet, NotificationsScreen, etc.)
-│   └── ui/                   # Reusable atomic elements (AmountKeypad, BudgetCard, CategoryChip, etc.)
-├── constants/                # Colors, default categories, and application themes
-├── store/                    # Zustand Store configuration & TS type definitions
-├── utils/                    # Common helper modules (formatting currency, date computations)
-├── setup-and-run.bat         # Automation script for quick installation and launch
-└── tsconfig.json             # TypeScript compiler rules
+Expense Tracking System/ (Git Root)
+├── backend/                  # Firebase Configuration & Security Rules
+│   ├── .firebaserc
+│   ├── firebase.json         # Firebase hosting configuration
+│   ├── firestore.indexes.json
+│   └── firestore.rules       # Firestore security rules
+├── mobile/                   # Expo React Native Frontend App
+│   ├── app/                  # Expo Router App Screens & Layouts
+│   │   ├── (onboarding)/     # Splash page, Auth & Balance setup
+│   │   ├── (tabs)/           # Dashboard, Analytics, Budgets, Profile
+│   │   ├── _layout.tsx       # Global root navigation layout
+│   │   └── index.tsx         # App routing redirect entry logic
+│   ├── assets/               # App icons & splash images
+│   ├── components/           # UI elements & custom screens
+│   ├── constants/            # Styling theme values, colors, categories
+│   ├── store/                # Zustand State management & TS types
+│   ├── utils/                # Date math, firebase, and format helpers
+│   ├── package.json          # App dependencies
+│   └── tsconfig.json         # TypeScript configuration
+├── cleanup.bat               # Cleans original files from root directory
+├── commit-with-date.bat      # Commits with custom author/committer date
+├── setup-and-run.bat         # Installs dependencies & runs Expo
+└── README.md                 # Project instructions
 ```
 
 ---
@@ -80,11 +81,12 @@ Ensure you have the following installed on your machine:
 2.  **Generate Dummy Assets** (Required if `assets/` icons do not exist yet):
     Run the utility script to generate transparent placeholder PNGs for Expo compilation:
     ```bash
-    node create-dummy-assets.js
+    node mobile/create-dummy-assets.js
     ```
 
 3.  **Install Dependencies**:
     ```bash
+    cd mobile
     npm install
     ```
 
@@ -102,6 +104,7 @@ Double-click or run:
 
 #### Option B: Standard Expo Start Command
 ```bash
+cd mobile
 npm run start
 ```
 Once the dev server starts, you will see a QR code in the terminal.

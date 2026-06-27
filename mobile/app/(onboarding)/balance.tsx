@@ -64,12 +64,6 @@ export default function BalanceScreen() {
     }
   };
 
-  const displayFormatted = () => {
-    const num = parseFloat(amount);
-    if (isNaN(num)) return '0';
-    return num.toLocaleString('en-IN');
-  };
-
   return (
     <KeyboardAvoidingView
       style={styles.container}

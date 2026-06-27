@@ -3,8 +3,8 @@ echo ====================================================
 echo   ExpenseTracker - React Native (Expo) App Setup
 echo ====================================================
 echo.
-echo Changing to project directory...
-cd /d "c:\Users\LENOVO\OneDrive\Desktop\Expense tracker application"
+echo Changing directory to mobile app...
+cd /d "%~dp0mobile"
 echo.
 echo Installing dependencies...
 call npm install

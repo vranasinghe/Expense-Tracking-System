@@ -38,7 +38,6 @@ export default function AmountKeypad({ value, onChange, currency }: AmountKeypad
   };
 
   const displayValue = value || '0';
-  const hasCents = displayValue.includes('.');
 
   return (
     <View style={styles.container}>
